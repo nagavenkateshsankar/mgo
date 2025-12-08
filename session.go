@@ -3159,6 +3159,13 @@ func (c *Collection) UpdateId(id interface{}, update interface{}) error {
 			}
 		}
 		_, err := db.Collection(c.Name).UpdateByID(context.Background(), id, update)
+
+		// Trigger event handler for consistency with Update() method
+		if err == nil {
+			selector := bson.M{"_id": id}
+			handleEventsFunc(c.FullName, selector, update)
+		}
+
 		return err
 	} else {
 		return c.Update(bson.D{{Name: "_id", Value: id}}, update)
