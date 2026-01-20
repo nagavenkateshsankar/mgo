@@ -779,16 +779,22 @@ func (file *GridFile) Seek(offset int64, whence int) (pos int64, err error) {
 // into an io.Reader.
 func (file *GridFile) Read(b []byte) (n int, err error) {
 	if UseMongoDriver {
-		db := file.gfs.Files.Database.Session.GetDriverDatabase()
-		bucket, _ := gridfs.NewBucket(db)
-
-		var downloadStream *gridfs.DownloadStream
-		downloadStream, err = bucket.OpenDownloadStream(file.Id())
-		if err != nil {
-			return 0, err
+		// Reuse existing download stream if available
+		// This is critical for multiple Read() calls (e.g., io.Copy)
+		// to work correctly - each Read() should continue from where
+		// the previous one left off, not restart from the beginning
+		if file.downloadStream == nil {
+			db := file.gfs.Files.Database.Session.GetDriverDatabase()
+			bucket, err := gridfs.NewBucket(db)
+			if err != nil {
+				return 0, err
+			}
+			file.downloadStream, err = bucket.OpenDownloadStream(file.Id())
+			if err != nil {
+				return 0, err
+			}
 		}
-		file.downloadStream = downloadStream
-		return downloadStream.Read(b)
+		return file.downloadStream.Read(b)
 
 	} else {
 		file.assertMode(gfsReading)
